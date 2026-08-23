@@ -56,14 +56,16 @@ app.get('/api/qr', (req, res) => {
 });
 
 app.post('/api/send', async (req, res) => {
-    const { phone, message } = req.body;
+    const { phone, message, imagenes_urls } = req.body;
+    
+    console.log('===> /api/send payload:', { phone, hasMessage: !!message, imagenes_urls });
 
     if (!phone || !message) {
         return res.status(400).json({ error: 'phone and message are required' });
     }
 
     try {
-        const result = await whatsappService.sendMessage(phone, message);
+        const result = await whatsappService.sendMessage(phone, message, imagenes_urls);
         res.json({
             success: true,
             messageId: result?.key?.id

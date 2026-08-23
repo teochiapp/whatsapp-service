@@ -53,6 +53,18 @@ const initWhatsApp = async () => {
                     initWhatsApp();
                 } else {
                     console.log('Logged out. Please scan QR again.');
+                    try {
+                        const fs = require('fs');
+                        if (fs.existsSync('baileys_auth_info')) {
+                            fs.rmSync('baileys_auth_info', { recursive: true, force: true });
+                        }
+                    } catch (err) {
+                        console.error('Error clearing auth info:', err);
+                    }
+                    
+                    setTimeout(() => {
+                        initWhatsApp();
+                    }, 2000);
                 }
             } else if (connection === 'open') {
                 console.log('WhatsApp connected successfully!');
@@ -86,7 +98,7 @@ const getQrCode = () => {
     return qrCodeData;
 };
 
-const sendMessage = async (phone, text) => {
+const sendMessage = async (phone, text, imagenes_urls = []) => {
     if (connectionState !== 'connected' || !sock) {
         throw new Error('WhatsApp is not connected');
     }
@@ -97,13 +109,40 @@ const sendMessage = async (phone, text) => {
         jid = `${jid}@s.whatsapp.net`;
     }
 
+    console.log(`Sending text to ${jid}...`);
     const result = await sock.sendMessage(jid, { text });
+    
+    console.log(`Checking images to send:`, imagenes_urls);
+    if (imagenes_urls && Array.isArray(imagenes_urls) && imagenes_urls.length > 0) {
+        for (const url of imagenes_urls) {
+            console.log(`Waiting 1.5s before sending image: ${url}`);
+            await new Promise(r => setTimeout(r, 1500));
+            try {
+                console.log(`Downloading image from ${url}...`);
+                const imgRes = await fetch(url);
+                if (!imgRes.ok) throw new Error(`HTTP error! status: ${imgRes.status}`);
+                const arrayBuffer = await imgRes.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                
+                console.log(`Sending image to ${jid}...`);
+                await sock.sendMessage(jid, { image: buffer });
+                console.log(`Image sent successfully`);
+            } catch (err) {
+                console.error(`Error enviando imagen ${url} a ${jid}:`, err);
+            }
+        }
+    }
+    
     return result;
 };
 
 const disconnect = async () => {
     if (sock) {
-        await sock.logout();
+        try {
+            await sock.logout();
+        } catch (e) {
+            console.error('Error during logout:', e);
+        }
         sock = null;
         qrCodeData = null;
         connectionState = 'disconnected';
