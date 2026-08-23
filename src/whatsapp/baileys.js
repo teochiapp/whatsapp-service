@@ -1,4 +1,13 @@
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+let makeWASocket, DisconnectReason, useMultiFileAuthState;
+
+const loadBaileys = async () => {
+    if (!makeWASocket) {
+        const baileys = await import('@whiskeysockets/baileys');
+        makeWASocket = baileys.default;
+        DisconnectReason = baileys.DisconnectReason;
+        useMultiFileAuthState = baileys.useMultiFileAuthState;
+    }
+};
 const qrcode = require('qrcode');
 const pino = require('pino');
 
@@ -9,6 +18,7 @@ let userPhone = null;
 
 const initWhatsApp = async () => {
     try {
+        await loadBaileys();
         const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
 
         sock = makeWASocket({
