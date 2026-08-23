@@ -1,0 +1,334 @@
+1. La arquitectura general la mantendría
+NH Estética - Hostinger Cloud
+│
+├── React
+├── Node.js
+├── MySQL
+│
+├── Campañas
+├── Turnos
+├── Clientes
+│
+└── Worker
+       │
+       │ HTTP interno
+       ▼
+VPS - Coolify
+│
+└── Whatsapp-Autoservice
+      │
+      ├── Node.js
+      ├── Baileys
+      ├── API privada
+      └── sesión persistente
+             │
+             ▼
+          WhatsApp
+Esto es bueno porque WhatsApp queda aislado de la aplicación principal. Si Baileys se cae, se desconecta o se rompe por un cambio de WhatsApp, NH Estética sigue funcionando.
+2. Cambiaría una cosa del apartado de "simular comportamiento humano"
+Esta parte:
+"delays aleatorios (...) para simular comportamiento humano"
+
+yo la eliminaría como objetivo del sistema.
+Podés tener rate limiting y espaciamiento entre mensajes, pero no diseñaría el sistema para intentar engañar a Meta.
+Por ejemplo:
+Mensaje 1
+   ↓
+esperar 15s
+   ↓
+Mensaje 2
+   ↓
+esperar 20s
+   ↓
+Mensaje 3
+está bien como mecanismo de control de velocidad y protección del servicio.
+Pero conceptualmente:
+"simular comportamiento humano para evitar detección"
+
+es una mala base para el sistema.
+Además, 10-20 segundos implica que:
+100 mensajes ≈ 17-33 minutos
+500 mensajes ≈ 1h 23m - 2h 46m
+1000 mensajes ≈ 2h 46m - 5h 33m
+Para campañas pequeñas no importa demasiado, pero conviene que el sistema sea consciente de esto.
+3. Agregaría estados de campaña un poco más completos
+Ahora tenés:
+Pendiente
+En Progreso
+Completada
+Cancelada
+Está bien, pero agregaría:
+Pendiente
+En Progreso
+Pausada
+Completada
+Cancelada
+Error
+Porque Pausada va a ser muy útil.
+Ejemplo:
+Campaña:
+"Promo agosto"
+
+Enviados: 83
+Pendientes: 417
+
+[ PAUSAR CAMPAÑA ]
+Si detectás que escribiste:
+"20% de descuento"
+
+cuando en realidad eran 30%, agradecés haber puesto ese botón antes de que el sistema se dedique a destruir el margen de beneficio de la empresa.
+4. scheduled_messages necesita un estado processing
+Ahora:
+status ENUM('pending', 'sent', 'failed')
+Yo agregaría:
+pending
+processing
+sent
+failed
+cancelled
+¿Por qué?
+Porque imaginemos:
+Worker
+  ↓
+toma mensaje #154
+  ↓
+empieza a enviarlo
+Si el proceso muere justo ahí, necesitás saber que ese mensaje estaba siendo procesado.
+Además agregaría:
+last_error TEXT NULL
+para poder saber por qué falló.
+Algo como:
+id
+campaign_id
+phone
+message
+scheduled_at
+
+status
+attempts
+last_error
+
+sent_at
+created_at
+5. Haría que la campaña genere los mensajes inmediatamente
+Cuando el usuario hace:
+Crear campaña
+el backend:
+1. Crea campaña
+2. Obtiene destinatarios
+3. Crea scheduled_messages
+4. Marca campaña como Pendiente
+Por ejemplo:
+Campaña #15
+
+2.350 destinatarios
+
+scheduled_messages:
+
+#1
+#2
+#3
+...
+#2350
+Después el Worker solamente procesa:
+WHERE status = 'pending'
+AND scheduled_at <= NOW()
+Esto tiene una ventaja enorme: la campaña queda completamente registrada antes de comenzar a enviar.
+6. No pondría el delay directamente en el cron
+En lugar de pensar:
+for (...) {
+    await send()
+    await sleep(random)
+}
+haría que cada mensaje tenga su propio:
+scheduled_at
+Por ejemplo:
+Mensaje 1 → 20:00:00
+Mensaje 2 → 20:00:17
+Mensaje 3 → 20:00:31
+Mensaje 4 → 20:00:48
+Mensaje 5 → 20:01:03
+Entonces el Worker simplemente consulta:
+WHERE status = 'pending'
+AND scheduled_at <= NOW()
+ORDER BY scheduled_at
+LIMIT 1
+Eso hace que pausar una campaña sea trivial:
+campaign.status = 'Pausada'
+y el worker deja de procesarla.
+7. Mejoraría un poco la API del WhatsApp Service
+Los tres endpoints que proponés están bien:
+GET /status
+GET /qr
+POST /send
+Pero agregaría:
+POST /disconnect
+y posiblemente:
+GET /health
+Quedaría:
+GET  /health
+GET  /status
+GET  /qr
+POST /send
+POST /disconnect
+/health
+Para saber:
+{
+  "service": "ok",
+  "whatsapp": "connected"
+}
+/status
+Más detallado:
+{
+  "connected": true,
+  "phone": "+549...",
+  "lastConnection": "...",
+  "hasQr": false
+}
+/send
+{
+  "phone": "549...",
+  "message": "Hola..."
+}
+Respuesta:
+{
+  "success": true,
+  "messageId": "..."
+}
+Ese messageId puede ser muy útil para auditoría.
+8. El QR merece un pequeño cambio
+No haría:
+GET /qr
+y que el frontend espere indefinidamente.
+Mejor que /status indique:
+{
+  "connected": false,
+  "qrAvailable": true
+}
+y /qr entregue el QR actual cuando esté disponible.
+Incluso mejor todavía, para una UX más limpia, podés tener polling desde React cada 2-3 segundos:
+React
+ ↓
+GET /status
+ ↓
+¿connected?
+ ├── Sí → mostrar conectado
+ └── No → ¿qrAvailable?
+              └── GET /qr
+No necesitás WebSockets para esto.
+9. La API entre Hostinger y VPS tiene que estar muy protegida
+Esto sí lo considero obligatorio.
+No:
+https://whatsapp.tudominio.com/send
+abierto al mundo.
+Sino:
+Authorization: Bearer <WHATSAPP_INTERNAL_TOKEN>
+Y el VPS valida ese token.
+Idealmente además:
+Hostinger Cloud
+       │
+       │ HTTPS
+       │ API KEY
+       ▼
+VPS
+Y nada de endpoints administrativos sin autenticación.
+10. En la base agregaría consentimiento de marketing
+Para campañas, esto me parece importante.
+En clientes:
+marketing_opt_in
+marketing_opt_out_at
+Y el filtro de campaña debería respetarlo.
+Por ejemplo:
+WHERE marketing_opt_in = 1
+Así podés diferenciar:
+📅 Recordatorio de turno
+de:
+📢 Marketing
+No deberían ser tratados igual.
+11. El MVP que yo implementaría
+No cambiaría radicalmente tu plan. Lo reduciría a esto:
+Fase 1
+Whatsapp-Autoservice
+Node.js
+Baileys
+Express
+Docker
+Persistencia de sesión
+/status
+/qr
+/send
+Probar:
+Vincular QR
+↓
+Conectar
+↓
+Enviar mensaje
+↓
+Reiniciar container
+↓
+Reconectar automáticamente
+Esto tiene que funcionar perfectamente antes de tocar campañas.
+Fase 2
+Backend NH Estética
+campanas
+scheduled_messages
+Endpoints:
+POST   /campaigns
+GET    /campaigns
+GET    /campaigns/:id
+POST   /campaigns/:id/pause
+POST   /campaigns/:id/resume
+POST   /campaigns/:id/cancel
+Y WhatsApp proxy:
+GET  /whatsapp/status
+GET  /whatsapp/qr
+POST /whatsapp/send
+Fase 3
+Worker
+MySQL
+   ↓
+scheduled_messages
+   ↓
+¿scheduled_at <= NOW()?
+   ↓
+WhatsApp Service
+   ↓
+Baileys
+Con:
+- reintentos
+- processing
+- failed
+- last_error
+- pausa/cancelación
+- límite de velocidad
+Fase 4
+Frontend
+Primero:
+WhatsApp
+├── Estado
+├── QR
+└── Desconectar
+Después:
+Campañas
+├── Nueva campaña
+├── Audiencia
+├── Mensaje
+├── Estado
+├── Progreso
+└── Pausar / Cancelar
+En definitiva
+El plan que te propusieron está bien y yo lo aprobaría con estos ajustes.
+La arquitectura fundamental es correcta:
+NH Estética decide qué/cuándo → MySQL registra → Worker despacha → VPS/Baileys se encarga exclusivamente de WhatsApp.
+
+Y particularmente me gusta que estés planteando probar primero localmente con 2-3 números propios. Haría incluso una prueba específica de:
+Enviar
+↓
+Desconectar WhatsApp
+↓
+Reiniciar Baileys
+↓
+Reconectar
+↓
+Verificar que la cola continúa correctamente
+Eso te va a descubrir los problemas realmente interesantes antes de ponerle el número del cliente y descubrirlos a las 10:30 de un martes, que es el horario favorito de los sistemas para fallar.
