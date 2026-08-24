@@ -33,7 +33,7 @@ const initWhatsApp = async () => {
 
             if (qr) {
                 try {
-                    qrCodeData = await qrcode.toDataURL(qr, { scale: 5, margin: 2 });
+                    qrCodeData = await qrcode.toDataURL(qr, { scale: 6, margin: 4 });
                     connectionState = 'qr_ready';
                 } catch (err) {
                     console.error('Error generating QR code base64:', err);
