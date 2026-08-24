@@ -25,7 +25,7 @@ const initWhatsApp = async () => {
             auth: state,
             printQRInTerminal: true,
             logger: pino({ level: 'silent' }), // Reduce logs
-            browser: ['NH Estetica Campaigns', 'Chrome', '1.0.0']
+            browser: ['Ubuntu', 'Chrome', '110.0.5481.77']
         });
 
         sock.ev.on('connection.update', async (update) => {
