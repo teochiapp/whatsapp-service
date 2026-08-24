@@ -41,6 +41,27 @@ app.get('/api/status', (req, res) => {
     res.json(status);
 });
 
+app.post('/api/clear-auth', async (req, res) => {
+    try {
+        await whatsappService.disconnect();
+        const fs = require('fs');
+        const path = require('path');
+        if (fs.existsSync('baileys_auth_info')) {
+            const files = fs.readdirSync('baileys_auth_info');
+            for (const file of files) {
+                fs.rmSync(path.join('baileys_auth_info', file), { recursive: true, force: true });
+            }
+        }
+        res.json({ success: true, message: 'Auth info cleared successfully' });
+        // Restart after clearing
+        setTimeout(() => {
+            whatsappService.initWhatsApp();
+        }, 2000);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to clear auth info: ' + err.message });
+    }
+});
+
 app.get('/api/qr', (req, res) => {
     const status = whatsappService.getStatus();
     if (status.connected) {

@@ -1,4 +1,4 @@
-let makeWASocket, DisconnectReason, useMultiFileAuthState;
+let makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion;
 
 const loadBaileys = async () => {
     if (!makeWASocket) {
@@ -6,6 +6,7 @@ const loadBaileys = async () => {
         makeWASocket = baileys.default;
         DisconnectReason = baileys.DisconnectReason;
         useMultiFileAuthState = baileys.useMultiFileAuthState;
+        fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion;
     }
 };
 const qrcode = require('qrcode');
@@ -20,10 +21,12 @@ const initWhatsApp = async () => {
     try {
         await loadBaileys();
         const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+        console.log(`Using WhatsApp v${version.join('.')}, isLatest: ${isLatest}`);
 
         sock = makeWASocket({
+            version,
             auth: state,
-            printQRInTerminal: true,
             logger: pino({ level: 'silent' }), // Reduce logs
             browser: ['Ubuntu', 'Chrome', '110.0.5481.77']
         });
