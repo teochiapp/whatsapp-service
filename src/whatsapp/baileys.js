@@ -49,8 +49,7 @@ const initWhatsApp = async (isRetry = false) => {
         sock = makeWASocket({
             version,
             auth: state,
-            logger: pino({ level: 'silent' }), // Reduce logs
-            browser: Browsers.macOS('Desktop') // Fix: Avoid WhatsApp banning/blocking the connection
+            logger: pino({ level: 'silent' }) // Reduce logs
         });
 
         sock.ev.on('connection.update', async (update) => {
