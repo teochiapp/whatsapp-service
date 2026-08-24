@@ -110,6 +110,19 @@ app.post('/api/disconnect', async (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`WhatsApp Autoservice running on port ${PORT}`);
 });
+
+// Graceful shutdown para evitar corrupción en volúmenes de Coolify
+const shutdown = async () => {
+    console.log('Cerrando servidor (Graceful Shutdown)... Desconectando WhatsApp.');
+    await whatsappService.disconnect();
+    server.close(() => {
+        console.log('Servidor finalizado.');
+        process.exit(0);
+    });
+};
+
+process.on('SIGTERM', shutdown); // Coolify usa SIGTERM al detener/replegar
+process.on('SIGINT', shutdown);  // Ctrl+C en local

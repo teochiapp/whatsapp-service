@@ -12,13 +12,34 @@ const loadBaileys = async () => {
 };
 const qrcode = require('qrcode');
 const pino = require('pino');
+const fs = require('fs');
+const path = require('path');
+
+const clearAuthInfo = async (retries = 5) => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            if (fs.existsSync('baileys_auth_info')) {
+                const files = fs.readdirSync('baileys_auth_info');
+                for (const file of files) {
+                    fs.rmSync(path.join('baileys_auth_info', file), { recursive: true, force: true });
+                }
+            }
+            console.log('Auth info cleared successfully.');
+            return true;
+        } catch (err) {
+            if (i === retries - 1) console.error('Final error clearing auth info:', err);
+            else await new Promise(r => setTimeout(r, 1000));
+        }
+    }
+    return false;
+};
 
 let sock = null;
 let qrCodeData = null;
 let connectionState = 'connecting';
 let userPhone = null;
 
-const initWhatsApp = async () => {
+const initWhatsApp = async (isRetry = false) => {
     try {
         await loadBaileys();
         const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
@@ -58,28 +79,6 @@ const initWhatsApp = async () => {
                 } else {
                     console.log('Logged out. Please scan QR again.');
                     
-                    // Función para borrar el contenido (no la carpeta en sí, ya que Coolify tira EBUSY si es un volumen)
-                    const clearAuthInfo = async (retries = 5) => {
-                        const fs = require('fs');
-                        const path = require('path');
-                        for (let i = 0; i < retries; i++) {
-                            try {
-                                if (fs.existsSync('baileys_auth_info')) {
-                                    const files = fs.readdirSync('baileys_auth_info');
-                                    for (const file of files) {
-                                        fs.rmSync(path.join('baileys_auth_info', file), { recursive: true, force: true });
-                                    }
-                                }
-                                console.log('Auth info cleared successfully.');
-                                return true;
-                            } catch (err) {
-                                if (i === retries - 1) console.error('Final error clearing auth info:', err);
-                                else await new Promise(r => setTimeout(r, 1000));
-                            }
-                        }
-                        return false;
-                    };
-
                     clearAuthInfo().then(() => {
                         setTimeout(() => {
                             initWhatsApp();
@@ -102,6 +101,15 @@ const initWhatsApp = async () => {
     } catch (error) {
         console.error('Error initializing WhatsApp:', error);
         connectionState = 'error';
+        
+        // Auto-recovery mechanism: If loading the state throws (e.g. corrupted JSON), wipe it and retry
+        if (!isRetry) {
+            console.log('Attempting to clear corrupted auth state and restart automatically...');
+            await clearAuthInfo();
+            setTimeout(() => {
+                initWhatsApp(true);
+            }, 2000);
+        }
     }
 };
 
@@ -193,5 +201,6 @@ module.exports = {
     getStatus,
     getQrCode,
     sendMessage,
-    disconnect
+    disconnect,
+    clearAuthInfo
 };
