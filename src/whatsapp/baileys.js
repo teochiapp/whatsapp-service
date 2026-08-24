@@ -53,18 +53,30 @@ const initWhatsApp = async () => {
                     initWhatsApp();
                 } else {
                     console.log('Logged out. Please scan QR again.');
-                    try {
-                        const fs = require('fs');
-                        if (fs.existsSync('baileys_auth_info')) {
-                            fs.rmSync('baileys_auth_info', { recursive: true, force: true });
-                        }
-                    } catch (err) {
-                        console.error('Error clearing auth info:', err);
-                    }
                     
-                    setTimeout(() => {
-                        initWhatsApp();
-                    }, 2000);
+                    // Función para borrar con reintentos (LevelDB tarda en liberar el lock)
+                    const clearAuthInfo = async (retries = 5) => {
+                        const fs = require('fs');
+                        for (let i = 0; i < retries; i++) {
+                            try {
+                                if (fs.existsSync('baileys_auth_info')) {
+                                    fs.rmSync('baileys_auth_info', { recursive: true, force: true });
+                                }
+                                console.log('Auth info cleared successfully.');
+                                return true;
+                            } catch (err) {
+                                if (i === retries - 1) console.error('Final error clearing auth info:', err);
+                                else await new Promise(r => setTimeout(r, 1000));
+                            }
+                        }
+                        return false;
+                    };
+
+                    clearAuthInfo().then(() => {
+                        setTimeout(() => {
+                            initWhatsApp();
+                        }, 2000);
+                    });
                 }
             } else if (connection === 'open') {
                 console.log('WhatsApp connected successfully!');
