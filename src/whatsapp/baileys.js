@@ -109,8 +109,22 @@ const sendMessage = async (phone, text, imagenes_urls = []) => {
         jid = `${jid}@s.whatsapp.net`;
     }
 
+    // Helper to send message with timeout (Baileys sometimes hangs waiting for ACK)
+    const sendWithTimeout = (promise, ms = 15000) => {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('sendMessage timeout')), ms))
+        ]);
+    };
+
     console.log(`Sending text to ${jid}...`);
-    const result = await sock.sendMessage(jid, { text });
+    let result;
+    try {
+        result = await sendWithTimeout(sock.sendMessage(jid, { text }));
+    } catch (err) {
+        console.warn(`Warning: sending text to ${jid} timed out or failed:`, err.message);
+        // Continue anyway, maybe it actually sent but ACK was lost
+    }
     
     console.log(`Checking images to send:`, imagenes_urls);
     if (imagenes_urls && Array.isArray(imagenes_urls) && imagenes_urls.length > 0) {
@@ -125,15 +139,15 @@ const sendMessage = async (phone, text, imagenes_urls = []) => {
                 const buffer = Buffer.from(arrayBuffer);
                 
                 console.log(`Sending image to ${jid}...`);
-                await sock.sendMessage(jid, { image: buffer });
+                await sendWithTimeout(sock.sendMessage(jid, { image: buffer }), 25000);
                 console.log(`Image sent successfully`);
             } catch (err) {
-                console.error(`Error enviando imagen ${url} a ${jid}:`, err);
+                console.error(`Error enviando imagen ${url} a ${jid}:`, err.message);
             }
         }
     }
     
-    return result;
+    return result || { status: 'timeout_but_proceeded' };
 };
 
 const disconnect = async () => {
