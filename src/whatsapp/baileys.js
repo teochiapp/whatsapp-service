@@ -66,7 +66,10 @@ const initWhatsApp = async (isRetry = false) => {
             }
 
             if (connection === 'close') {
-                const shouldReconnect = (lastDisconnect.error)?.output?.statusCode !== DisconnectReason.loggedOut;
+                const statusCode = (lastDisconnect.error)?.output?.statusCode;
+                
+                // 401: Logged Out, 403: Banned, 428: Precondition Required (Corrupted/Blocked)
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 403 && statusCode !== 428;
                 console.log('connection closed due to ', lastDisconnect.error, ', reconnecting ', shouldReconnect);
                 
                 qrCodeData = null;
@@ -75,9 +78,11 @@ const initWhatsApp = async (isRetry = false) => {
 
                 if (shouldReconnect) {
                     connectionState = 'reconnecting';
-                    initWhatsApp();
+                    setTimeout(() => {
+                        initWhatsApp();
+                    }, 3000); // 3 second delay to avoid aggressive looping
                 } else {
-                    console.log('Logged out. Please scan QR again.');
+                    console.log('Session invalid, corrupted, or logged out. Clearing auth info...');
                     
                     clearAuthInfo().then(() => {
                         setTimeout(() => {
