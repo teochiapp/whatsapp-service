@@ -1,4 +1,4 @@
-let makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion;
+let makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, Browsers;
 
 const loadBaileys = async () => {
     if (!makeWASocket) {
@@ -7,6 +7,7 @@ const loadBaileys = async () => {
         DisconnectReason = baileys.DisconnectReason;
         useMultiFileAuthState = baileys.useMultiFileAuthState;
         fetchLatestBaileysVersion = baileys.fetchLatestBaileysVersion;
+        Browsers = baileys.Browsers;
     }
 };
 const qrcode = require('qrcode');
@@ -28,7 +29,7 @@ const initWhatsApp = async () => {
             version,
             auth: state,
             logger: pino({ level: 'silent' }), // Reduce logs
-            browser: ['Ubuntu', 'Chrome', '110.0.5481.77']
+            browser: Browsers.macOS('Desktop') // Fix: Avoid WhatsApp banning/blocking the connection
         });
 
         sock.ev.on('connection.update', async (update) => {
