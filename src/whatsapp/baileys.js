@@ -128,13 +128,8 @@ const sendMessage = async (phone, text, imagenes_urls = []) => {
     };
 
     console.log(`Sending text to ${jid}...`);
-    let result;
-    try {
-        result = await sendWithTimeout(sock.sendMessage(jid, { text }));
-    } catch (err) {
-        console.warn(`Warning: sending text to ${jid} timed out or failed:`, err.message);
-        // Continue anyway, maybe it actually sent but ACK was lost
-    }
+    // If this times out, it will throw and the outer catch in app.js will return a 500 to Hostinger
+    const result = await sendWithTimeout(sock.sendMessage(jid, { text }));
     
     console.log(`Checking images to send:`, imagenes_urls);
     if (imagenes_urls && Array.isArray(imagenes_urls) && imagenes_urls.length > 0) {
@@ -153,11 +148,12 @@ const sendMessage = async (phone, text, imagenes_urls = []) => {
                 console.log(`Image sent successfully`);
             } catch (err) {
                 console.error(`Error enviando imagen ${url} a ${jid}:`, err.message);
+                throw new Error(`Error enviando imagen: ${err.message}`);
             }
         }
     }
     
-    return result || { status: 'timeout_but_proceeded' };
+    return result;
 };
 
 const disconnect = async () => {
