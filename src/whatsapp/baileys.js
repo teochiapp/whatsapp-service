@@ -118,9 +118,13 @@ const sendMessage = async (phone, text, imagenes_urls = []) => {
     // Ensure phone ends with @s.whatsapp.net and has no invalid characters (like + or spaces)
     let numericPhone = phone.replace(/[^0-9]/g, '');
     
-    // AR WhatsApp fix: if it starts with 54 and has 12 digits, it's missing the '9' for mobile.
+    // AR WhatsApp fixes
     if (numericPhone.startsWith('54') && numericPhone.length === 12) {
+        // Missing '9' after 54
         numericPhone = '549' + numericPhone.slice(2);
+    } else if (numericPhone.startsWith('0') && numericPhone.length >= 10 && numericPhone.length <= 11) {
+        // Local AR format (e.g. 03564361590). Remove 0 and prepend 549
+        numericPhone = '549' + numericPhone.slice(1);
     }
     
     let jid = `${numericPhone}@s.whatsapp.net`;
