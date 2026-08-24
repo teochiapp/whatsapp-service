@@ -115,11 +115,9 @@ const sendMessage = async (phone, text, imagenes_urls = []) => {
         throw new Error('WhatsApp is not connected');
     }
 
-    // Ensure phone ends with @s.whatsapp.net
-    let jid = phone;
-    if (!jid.includes('@s.whatsapp.net')) {
-        jid = `${jid}@s.whatsapp.net`;
-    }
+    // Ensure phone ends with @s.whatsapp.net and has no invalid characters (like + or spaces)
+    let numericPhone = phone.replace(/[^0-9]/g, '');
+    let jid = `${numericPhone}@s.whatsapp.net`;
 
     // Helper to send message with timeout (Baileys sometimes hangs waiting for ACK)
     const sendWithTimeout = (promise, ms = 15000) => {
