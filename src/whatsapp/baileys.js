@@ -54,13 +54,17 @@ const initWhatsApp = async () => {
                 } else {
                     console.log('Logged out. Please scan QR again.');
                     
-                    // Función para borrar con reintentos (LevelDB tarda en liberar el lock)
+                    // Función para borrar el contenido (no la carpeta en sí, ya que Coolify tira EBUSY si es un volumen)
                     const clearAuthInfo = async (retries = 5) => {
                         const fs = require('fs');
+                        const path = require('path');
                         for (let i = 0; i < retries; i++) {
                             try {
                                 if (fs.existsSync('baileys_auth_info')) {
-                                    fs.rmSync('baileys_auth_info', { recursive: true, force: true });
+                                    const files = fs.readdirSync('baileys_auth_info');
+                                    for (const file of files) {
+                                        fs.rmSync(path.join('baileys_auth_info', file), { recursive: true, force: true });
+                                    }
                                 }
                                 console.log('Auth info cleared successfully.');
                                 return true;
