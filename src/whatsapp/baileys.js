@@ -43,13 +43,10 @@ const initWhatsApp = async (isRetry = false) => {
     try {
         await loadBaileys();
         const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
-        const { version, isLatest } = await fetchLatestBaileysVersion();
-        console.log(`Using WhatsApp v${version.join('.')}, isLatest: ${isLatest}`);
-
         sock = makeWASocket({
-            version,
             auth: state,
-            logger: pino({ level: 'silent' }) // Reduce logs
+            logger: pino({ level: 'silent' }), // Reduce logs
+            browser: Browsers.ubuntu('Chrome')
         });
 
         sock.ev.on('connection.update', async (update) => {
