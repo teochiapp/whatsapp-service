@@ -66,10 +66,10 @@ const initWhatsApp = async (isRetry = false) => {
             if (connection === 'close') {
                 const statusCode = (lastDisconnect.error)?.output?.statusCode;
                 
-                // 401: Logged Out, 403: Banned, 428: Precondition Required, 408: Timed Out (QR refs ended)
-                // If it closed while waiting for QR (qr_ready) or timed out (408), the pairing failed and we MUST clear the volume to avoid stale keys.
-                const isPairingFailure = statusCode === 408 || statusCode === DisconnectReason.timedOut || connectionState === 'qr_ready';
-                const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== 403 && statusCode !== 428 && !isPairingFailure;
+                // 401: Logged Out, 403: Banned, 428: Precondition Required, 408: Timed Out (QR refs ended), 515: Restart Required
+                const isPairingFailure = statusCode === 408 || statusCode === DisconnectReason.timedOut;
+                const isRestartRequired = statusCode === 515 || statusCode === DisconnectReason.restartRequired;
+                const shouldReconnect = isRestartRequired || (statusCode !== DisconnectReason.loggedOut && statusCode !== 403 && statusCode !== 428 && !isPairingFailure);
                 console.log('connection closed due to ', lastDisconnect.error, ', reconnecting ', shouldReconnect);
                 
                 qrCodeData = null;
