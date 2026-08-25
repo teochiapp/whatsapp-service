@@ -46,7 +46,9 @@ const initWhatsApp = async (isRetry = false) => {
         sock = makeWASocket({
             auth: state,
             logger: pino({ level: 'silent' }), // Reduce logs
-            browser: Browsers.ubuntu('Chrome')
+            browser: Browsers.ubuntu('Chrome'),
+            syncFullHistory: false, // Prevents timeouts during initial sync for accounts with large histories
+            markOnlineOnConnect: false // Sometimes helps prevent silent blocks on connect
         });
 
         sock.ev.on('connection.update', async (update) => {
