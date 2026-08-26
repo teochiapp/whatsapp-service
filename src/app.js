@@ -68,12 +68,14 @@ app.get('/api/qr', (req, res) => {
         return res.status(400).json({ error: 'WhatsApp is already connected.' });
     }
     
-    const qrData = whatsappService.getQrCode();
-    if (!qrData) {
+    const { qrCodeData, qrGeneratedAt } = whatsappService.getQrCode();
+    if (!qrCodeData) {
         return res.status(404).json({ error: 'QR Code not available yet. Please try again in a few seconds.' });
     }
 
-    res.json({ qr: qrData });
+    // qrGeneratedAt: timestamp en ms del momento en que Baileys generó este QR.
+    // El cliente puede usarlo para mostrar un countdown (~20s de vida útil).
+    res.json({ qr: qrCodeData, qrGeneratedAt });
 });
 
 app.post('/api/send', async (req, res) => {

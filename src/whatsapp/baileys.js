@@ -36,6 +36,7 @@ const clearAuthInfo = async (retries = 5) => {
 
 let sock = null;
 let qrCodeData = null;
+let qrGeneratedAt = null; // Timestamp (ms) del último QR generado
 let connectionState = 'connecting';
 let userPhone = null;
 
@@ -46,7 +47,7 @@ const initWhatsApp = async (isRetry = false) => {
         sock = makeWASocket({
             auth: state,
             logger: pino({ level: 'silent' }), // Reduce logs
-            browser: Browsers.ubuntu('Chrome'),
+            browser: Browsers.macOS('Safari'), // macOS Safari fingerprint: más compatible con WA Web
             syncFullHistory: false, // Prevents timeouts during initial sync for accounts with large histories
             markOnlineOnConnect: false // Sometimes helps prevent silent blocks on connect
         });
@@ -57,7 +58,9 @@ const initWhatsApp = async (isRetry = false) => {
             if (qr) {
                 try {
                     qrCodeData = await qrcode.toDataURL(qr, { scale: 6, margin: 4 });
+                    qrGeneratedAt = Date.now(); // Registrar cuándo se generó este QR
                     connectionState = 'qr_ready';
+                    console.log(`Nuevo QR generado a las ${new Date(qrGeneratedAt).toLocaleTimeString()}. Expira ~20s.`);
                 } catch (err) {
                     console.error('Error generating QR code base64:', err);
                 }
@@ -73,6 +76,7 @@ const initWhatsApp = async (isRetry = false) => {
                 console.log('connection closed due to ', lastDisconnect.error, ', reconnecting ', shouldReconnect);
                 
                 qrCodeData = null;
+                qrGeneratedAt = null;
                 connectionState = 'disconnected';
                 userPhone = null;
 
@@ -94,6 +98,7 @@ const initWhatsApp = async (isRetry = false) => {
                 console.log('WhatsApp connected successfully!');
                 connectionState = 'connected';
                 qrCodeData = null; // Clear QR code as it's no longer needed
+                qrGeneratedAt = null;
                 
                 // Get the connected phone number
                 const id = sock.user.id;
@@ -123,12 +128,13 @@ const getStatus = () => {
         connected: connectionState === 'connected',
         state: connectionState,
         phone: userPhone,
-        qrAvailable: qrCodeData !== null
+        qrAvailable: qrCodeData !== null,
+        qrGeneratedAt: qrGeneratedAt // ms timestamp del QR actual (null si no hay QR)
     };
 };
 
 const getQrCode = () => {
-    return qrCodeData;
+    return { qrCodeData, qrGeneratedAt };
 };
 
 const sendMessage = async (phone, text, imagenes_urls = []) => {

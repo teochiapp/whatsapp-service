@@ -5,14 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WhatsApp Autoservice Tester</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-        .card { border: 1px solid #ccc; padding: 20px; border-radius: 8px; max-width: 400px; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        body { font-family: Arial, sans-serif; padding: 20px; text-align: center; background: #f0f2f5; }
+        .card { border: 1px solid #ccc; padding: 20px; border-radius: 12px; max-width: 440px; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: white; }
         button { padding: 10px 15px; margin: 10px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
         button:hover { background: #0056b3; }
-        input { padding: 8px; margin: 5px; width: 80%; }
-        #qr-container img { margin-top: 15px; max-width: 300px; border-radius: 8px; image-rendering: pixelated; }
-        .status { margin-bottom: 15px; font-weight: bold; }
-        .log { margin-top: 20px; font-family: monospace; font-size: 12px; background: #f4f4f4; padding: 10px; text-align: left; border-radius: 4px; max-height: 200px; overflow-y: auto; }
+        input { padding: 8px; margin: 5px; width: 80%; border: 1px solid #ccc; border-radius: 4px; }
+        #qr-container img { margin-top: 10px; max-width: 280px; border-radius: 8px; image-rendering: pixelated; border: 3px solid #25D366; }
+        .status { margin-bottom: 12px; font-weight: bold; font-size: 15px; }
+        .log { margin-top: 16px; font-family: monospace; font-size: 11px; background: #f4f4f4; padding: 10px; text-align: left; border-radius: 4px; max-height: 200px; overflow-y: auto; }
+
+        /* Countdown bar */
+        #qr-meta { margin-top: 6px; font-size: 13px; color: #555; }
+        #countdown-bar-wrap { background: #e0e0e0; border-radius: 6px; height: 8px; margin: 6px auto; max-width: 280px; overflow: hidden; }
+        #countdown-bar { height: 100%; width: 100%; background: #25D366; border-radius: 6px; transition: width 1s linear, background 0.5s; }
+        #countdown-text { font-size: 12px; color: #888; margin-bottom: 6px; }
     </style>
 </head>
 <body>
@@ -21,6 +27,12 @@
         <div class="status" id="status-text">Status: Checking...</div>
         
         <div id="qr-container"></div>
+        <div id="qr-meta" style="display:none">
+            <div id="countdown-bar-wrap">
+                <div id="countdown-bar"></div>
+            </div>
+            <div id="countdown-text">Actualizando QR...</div>
+        </div>
 
         <hr>
         <h3>Send Message</h3>
@@ -36,16 +48,53 @@
     </div>
 
     <script>
-        // ¡ATENCIÓN! No subas tu token real a GitHub. Si vas a probar, pégalo temporalmente aquí.
+        // ¡ATENCIÓN! No subas tu token real a GitHub.
         const TOKEN = 'REPLACE_WITH_YOUR_TOKEN';
         const BASE_URL = '/api';
-        
+        const QR_LIFETIME_MS = 20000; // WhatsApp expira el QR en ~20s
+
+        let currentQrGeneratedAt = null;
+        let countdownInterval = null;
+
         function logMsg(msg) {
             const div = document.createElement('div');
             div.textContent = `> ${msg}`;
             document.getElementById('log').prepend(div);
         }
 
+        // ─── Countdown ────────────────────────────────────────────────────────────
+        function startCountdown(qrGeneratedAt) {
+            if (countdownInterval) clearInterval(countdownInterval);
+            const meta = document.getElementById('qr-meta');
+            const bar  = document.getElementById('countdown-bar');
+            const text = document.getElementById('countdown-text');
+            meta.style.display = 'block';
+
+            countdownInterval = setInterval(() => {
+                const elapsed = Date.now() - qrGeneratedAt;
+                const remaining = Math.max(0, QR_LIFETIME_MS - elapsed);
+                const pct = (remaining / QR_LIFETIME_MS) * 100;
+
+                bar.style.width = pct + '%';
+                // Verde → naranja → rojo según tiempo restante
+                if (pct > 50)       bar.style.background = '#25D366';
+                else if (pct > 20)  bar.style.background = '#f0a500';
+                else                bar.style.background = '#e53935';
+
+                const secs = Math.ceil(remaining / 1000);
+                text.textContent = remaining > 0
+                    ? `QR expira en ${secs}s — mantené esta pantalla abierta`
+                    : 'Actualizando QR...';
+            }, 500);
+        }
+
+        function stopCountdown() {
+            if (countdownInterval) clearInterval(countdownInterval);
+            countdownInterval = null;
+            document.getElementById('qr-meta').style.display = 'none';
+        }
+
+        // ─── Status polling ───────────────────────────────────────────────────────
         async function fetchStatus() {
             try {
                 const res = await fetch(`${BASE_URL}/status`, {
@@ -53,42 +102,65 @@
                 });
                 const data = await res.json();
                 document.getElementById('status-text').innerText = `Status: ${data.state} (Connected: ${data.connected})`;
-                
+
                 if (data.connected) {
-                    document.getElementById('qr-container').innerHTML = `<p style="color: green;">Connected as ${data.phone}</p>`;
-                } else if (data.qrAvailable) {
-                    fetchQR();
-                } else {
-                    document.getElementById('qr-container').innerHTML = '';
+                    document.getElementById('qr-container').innerHTML = `<p style="color: #25D366; font-size: 16px;">✅ Conectado como ${data.phone}</p>`;
+                    stopCountdown();
+                    currentQrGeneratedAt = null;
+                } else if (!data.qrAvailable) {
+                    document.getElementById('qr-container').innerHTML = '<p style="color:#888">Esperando QR...</p>';
+                    stopCountdown();
                 }
+                // Si qrAvailable=true, el loop de fetchQR ya se encarga
             } catch (err) {
-                document.getElementById('status-text').innerText = `Status: Error connecting to API`;
+                document.getElementById('status-text').innerText = `Status: Error conectando con la API`;
             }
         }
 
+        // ─── QR polling (cada 5s para siempre tener el más fresco) ───────────────
         async function fetchQR() {
             try {
+                const statusRes = await fetch(`${BASE_URL}/status`, {
+                    headers: { 'Authorization': `Bearer ${TOKEN}` }
+                });
+                const status = await statusRes.json();
+                if (status.connected || !status.qrAvailable) return;
+
                 const res = await fetch(`${BASE_URL}/qr`, {
                     headers: { 'Authorization': `Bearer ${TOKEN}` }
                 });
+                if (!res.ok) return;
                 const data = await res.json();
+
                 if (data.qr) {
-                    document.getElementById('qr-container').innerHTML = `<img src="${data.qr}" alt="WhatsApp QR">`;
+                    // Solo actualizar la imagen si el QR cambió (qrGeneratedAt distinto)
+                    if (data.qrGeneratedAt && data.qrGeneratedAt !== currentQrGeneratedAt) {
+                        currentQrGeneratedAt = data.qrGeneratedAt;
+                        document.getElementById('qr-container').innerHTML =
+                            `<img src="${data.qr}" alt="WhatsApp QR">`;
+                        logMsg(`Nuevo QR recibido (generado: ${new Date(data.qrGeneratedAt).toLocaleTimeString()})`);
+                        startCountdown(data.qrGeneratedAt);
+                    } else if (!data.qrGeneratedAt) {
+                        // Fallback: servidor viejo sin qrGeneratedAt, siempre actualizar
+                        document.getElementById('qr-container').innerHTML =
+                            `<img src="${data.qr}" alt="WhatsApp QR">`;
+                    }
                 }
             } catch (err) {
-                console.error(err);
+                // silencioso — el status poll ya avisa si hay error de red
             }
         }
 
+        // ─── Acciones ─────────────────────────────────────────────────────────────
         async function sendMessage() {
             const phone = document.getElementById('phone').value;
             const message = document.getElementById('message').value;
-            if(!phone || !message) return alert('Enter phone and message');
-            
+            if (!phone || !message) return alert('Enter phone and message');
+
             try {
                 const res = await fetch(`${BASE_URL}/send`, {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Authorization': `Bearer ${TOKEN}`,
                         'Content-Type': 'application/json'
                     },
@@ -114,9 +186,14 @@
             }
         }
 
-        // Poll status every 3 seconds
+        // ─── Loops ────────────────────────────────────────────────────────────────
+        // Status: cada 3s
         setInterval(fetchStatus, 3000);
         fetchStatus();
+
+        // QR: cada 5s — garantiza que siempre mostramos el QR vigente antes de que expire
+        setInterval(fetchQR, 5000);
+        fetchQR();
     </script>
 </body>
 </html>
