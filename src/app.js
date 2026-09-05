@@ -112,7 +112,7 @@ app.post('/api/disconnect', async (req, res) => {
 });
 
 // Start the server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`WhatsApp Autoservice running on port ${PORT}`);
 });
 
